@@ -28,4 +28,4 @@ WORKDIR /data
 
 
 
-CMD ["python", "start-api.py", "--port", "8013", "--host", "0.0.0.0", "--hf_token", "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"]
+CMD ["python", "start-api.py", "--port", "8013", "--host", "0.0.0.0", "--hf_token", ""]
