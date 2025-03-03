@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document and Chatbot</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+        }
+
+        .document-section {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 2px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chatbot-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-left: 2px solid #ddd;
+        }
+
+        .chatbot-header {
+            background-color: #0078D4;
+            color: white;
+            text-align: center;
+            padding: 10px;
+            font-size: 1.2em;
+        }
+
+        .chatbot-messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            margin: 5px 0;
+            padding: 10px;
+            border-radius: 10px;
+            max-width: 70%;
+            word-wrap: break-word;
+            display: flex;
+            align-items: center;
+            position: relative;
+        }
+
+        .bot-message {
+            align-self: flex-start;
+            background-color: #e0e0e0;
+            position: relative;
+            padding-left: 30px; /* Added space for icon */
+        }
+
+        .user-message {
+            align-self: flex-end;
+            background-color: #0078D4;
+            color: white;
+        }
+
+        .operator-icon {
+            position: absolute;
+            top: 9px;
+            left: 5px;
+            width: 20px;
+            height: 20px;
+            vertical-align: middle;
+            z-index: 1; /* Ensure the icon is on top of the text */
+        }
+
+        .reload-icon {
+            width: 20px;  /* Size of the icon */
+            height: 20px;
+        }
+        
+        .chatbot-input {
+            display: flex;
+            border-top: 2px solid #ddd;
+            padding: 10px;
+            justify-content: center; /* Center the buttons */
+            align-items: center; /* Center the input and buttons vertically */
+        }
+
+        .chatbot-input input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-right: 10px; /* Space between the input and the buttons */
+        }
+
+        .chatbot-input button {
+            padding: 10px 15px;
+            border: none;
+            background-color: #0078D4;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 40px;
+            margin: 0 5px; /* Add space between buttons */
+        }
+
+        .chatbot-input button:hover {
+            background-color: #005A9E;
+        }
+
+        .load-button {
+            margin: 10px 0;
+            padding: 5px 10px;
+            border: none;
+            background-color: #0078D4;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            align-self: flex-start;
+        }
+
+        .load-button:hover {
+            background-color: #005A9E;
+        }
+
+        pre {
+            flex: 1;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: #f4f4f4;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+        }
+
+        .highlight {
+            background-color: lightblue;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="container">
+        <div class="document-section">
+            <button @click="triggerFileLoad" class="load-button">Load Document</button>
+            <input type="file" id="fileInput" @change="loadFile" style="display: none;">
+            <pre v-html="highlightedDocument" v-if="documentContent"></pre>
+            <h1 v-else>Load a document to display its content</h1>
+        </div>
+
+        <div class="chatbot-section">
+            <div class="chatbot-header">Chatbot</div>
+            <div class="chatbot-messages" ref="chatMessages">
+                <div v-for="(message, index) in messages" :key="index" 
+                     :class="['message', message.sender === 'You' ? 'user-message' : 'bot-message']"
+                     @click="highlightMessageGrounds(message.text)">
+                    <template v-if="message.sender === 'Bot'">
+                        <img src="operator-icon.png" alt="Operator Icon" class="operator-icon">
+                        <span v-html="formatMessage(message.text)"></span>
+                    </template>
+                    <template v-else>
+                        {{ message.text }}
+                    </template>
+                </div>
+            </div>
+            <div class="chatbot-input">
+                <input type="text" v-model="userMessage" placeholder="Type your message here..." :disabled="isWaiting" @keyup.enter="sendMessage">
+                <button @click="sendMessage" :disabled="isWaiting">
+                    <span v-if="isWaiting">Sending...</span>
+                    <span v-else>Send</span>
+                </button>
+                <button @click="reloadLastMessage" :disabled="isWaiting || !lastMessage" class="load-button">
+                    <!-- Reload Icon (Image) -->
+                    <img src="reload.png" alt="Reload Icon" class="reload-icon" />
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                documentContent: '',
+                userMessage: '',
+                messages: [
+                    { sender: 'Bot', text: 'Buongiorno come posso aiutare?' }
+                ],
+                groundSnippets: [],
+                messageGroundMap: {},
+                isWaiting: false,
+                lastMessage: null,
+                lastPayload: null,
+                lastResponse: null
+            },
+            
+            computed: {
+                highlightedDocument() {
+                    if (!this.documentContent) return '';
+                    const regexArray = this.groundSnippets.map(keyword => new RegExp(`(${this.escapeRegex(keyword)})`, 'gi'));
+                    let highlightedContent = this.documentContent;
+                    regexArray.forEach(regex => {
+                        highlightedContent = highlightedContent.replace(regex, '<span class="highlight">$1</span>');
+                    });
+                    return highlightedContent;
+                }
+            },
+
+            methods: {
+                formatMessage(text) {
+                    const trimmedText = text.replace(/^\n+/, '');
+                    const escapedText = trimmedText
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;');
+                    return escapedText.replace(/\n/g, '<br>');
+                },
+
+                escapeRegex(string) {
+                    return string.replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
+                },
+
+                triggerFileLoad() {
+                    document.getElementById('fileInput').click();
+                },
+
+                loadFile(event) {
+                    const file = event.target.files[0];
+                    if (file && file.type === 'text/plain') {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            this.documentContent = e.target.result;
+                        };
+                        reader.readAsText(file);
+                    } else {
+                        alert('Please upload a plain text file.');
+                    }
+                },
+
+
+                async sendMessage() {
+                    if (!this.userMessage.trim()) return;
+
+                    // Add user's message
+                    this.messages.push({ sender: 'You', text: this.userMessage });
+
+                    // Add processing message
+                    const processingMessage = { sender: 'Bot', text: 'Processing your request...' };
+                    this.messages.push(processingMessage);
+
+                    // Clear input and set waiting state
+                    const currentMessage = this.userMessage;
+                    this.userMessage = '';
+                    this.isWaiting = true;
+
+                    // Track the last message and payload
+                    this.lastMessage = currentMessage;
+
+                    // Scroll to bottom after user sends message and processing message is added
+                    this.scrollToBottom();
+
+                    try {
+                        // Prepare the dialogue without the last bot message
+                        const filteredDialogue = this.messages.slice();
+                        if (filteredDialogue.length > 0 && filteredDialogue[filteredDialogue.length - 1].sender === 'Bot') {
+                            filteredDialogue.pop();
+                        }
+
+                        // Prepare the JSON payload
+                        const payload = {
+                            generation_mode: "aixpa_chatbot_local",
+                            documents: this.documentContent ? [this.documentContent] : [],
+                            dialogue: filteredDialogue.map(msg => ({ 
+                                speaker: msg.sender === 'You' ? 'speaker_1' : 'speaker_2', 
+                                turn_text: msg.text 
+                            })),
+                            user: "operatore",
+                            language: "informale"
+                        };
+
+                        // Save the last payload
+                        this.lastPayload = payload;
+
+                        // Send the message to API
+                        const response = await fetch('http://localhost:1234/dynamic_generation/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer w4OqAOToBKiWeHsW3X1zfr0S1rCMY4hA'
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!response.ok) throw new Error('Network error');
+
+                        const data = await response.json();
+                        const botReply = data.message || 'No reply received';
+
+                        // Save the response
+                        this.lastResponse = botReply;
+
+                        // Update ground keywords and highlight document
+                        this.groundSnippets = data.ground || [];
+
+                        // Map both the user's message and bot's reply to the same grounds
+                        this.messageGroundMap[currentMessage] = this.groundSnippets;
+                        this.messageGroundMap[botReply] = this.groundSnippets;
+
+                        // Replace processing message with actual reply
+                        processingMessage.text = botReply;
+
+                        // Scroll to first highlighted part after bot's response
+                        this.scrollToFirstHighlighted();
+
+                    } catch (error) {
+                        // In case of an error, update the message with error text
+                        processingMessage.text = `Error: ${error.message}`;
+                    }
+
+                    // Reset waiting state (to enable the Send button again)
+                    this.isWaiting = false;
+
+                    // Scroll to bottom after bot reply
+                    this.scrollToBottom();
+                },
+
+                async reloadLastMessage() {
+                    if (!this.lastMessage || !this.lastPayload) return;
+
+                    // Remove the last two messages before resending
+                    this.messages.splice(-2, 2);
+
+                    // Add user's last message again
+                    this.messages.push({ sender: 'You', text: this.lastMessage });
+
+                    // Add processing message
+                    const processingMessage = { sender: 'Bot', text: 'Processing your request...' };
+                    this.messages.push(processingMessage);
+
+                    // Set waiting state
+                    this.isWaiting = true;
+
+                    // Scroll to bottom after user message and processing message is added
+                    this.scrollToBottom();
+
+                    try {
+                        // Send the last stored payload
+                        const response = await fetch('http://localhost:1234/dynamic_generation/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer w4OqAOToBKiWeHsW3X1zfr0S1rCMY4hA'
+                            },
+                            body: JSON.stringify(this.lastPayload)
+                        });
+
+                        if (!response.ok) throw new Error('Network error');
+
+                        const data = await response.json();
+                        const botReply = data.message || 'No reply received';
+
+                        // Save the response again
+                        this.lastResponse = botReply;
+
+                        // Update ground keywords and highlight document
+                        this.groundSnippets = data.ground || [];
+
+                        // Replace processing message with actual reply
+                        processingMessage.text = botReply;
+
+                        // Scroll to first highlighted part after bot's response
+                        this.scrollToFirstHighlighted();
+
+                    } catch (error) {
+                        // In case of an error, update the message with error text
+                        processingMessage.text = `Error: ${error.message}`;
+                    }
+
+                    // Reset waiting state
+                    this.isWaiting = false;
+
+                    // Scroll to bottom after bot reply
+                    this.scrollToBottom();
+                },
+
+                // Function to handle scroll to bottom of chat
+                scrollToBottom() {
+                    this.$nextTick(() => {
+                        const chatMessages = this.$refs.chatMessages;
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                    });
+                },
+
+                // Function to highlight document text based on ground snippets
+                highlightMessageGrounds(messageText) {
+                    const groundSnippets = this.messageGroundMap[messageText];
+                    if (groundSnippets) {
+                        this.groundSnippets = groundSnippets;  // Update the ground snippets for the document
+                        this.scrollToFirstHighlighted();  // Scroll to first highlighted term
+                    }
+                },
+
+                // Scroll to the first highlighted element
+                scrollToFirstHighlighted() {
+                    this.$nextTick(() => {
+                        const highlighted = document.querySelector('.highlight');
+                        if (highlighted) {
+                            highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    });
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+docker run -d  --gpus '"device=1"' --rm -ti -p 8013:8013 --shm-size=48gb -v $PWD:/data --name aixpa-demo-menini-land-1 aixpa-demo-menini-land

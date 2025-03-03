@@ -1,0 +1,21 @@
+{
+    "AIXPA": {
+        "QUESTION": {
+            "GENERIC_INFORMAL_QUEST_V1.2": "You are a worker from the public administration who wants to know more informations.\nYou will be provided with an article (delimited with XML tag).\nYou are having a written informal conversation and want to know more about the topics of the article.\nGenerate three questions in Italian, do not repeat prior questions.\nThe information needed to answer the question must be present in the article.\nBe as specific as possible.\nFollow the format:\n<questions>\n<question>text</question>\n<question>text</question>\n<question>text</question>\n</questions>\n\nOccasionally you might be prompted to answer a question instead, do so using always the XML above."
+        },
+        "ANSWER": {
+             "ANSW_COMUNI_V1": "You are an helpful agent whose goal is to answer questions.\nYou are having a written informal conversation.\nOnly use the provided contexts (delimited with XML tag) to answer questions. Ignore everything you know outside the provided contexts.\nAnswer once in Italian to the question. The answer must be as complete and specific as possible.\nUse the following format to display the output:\n<answer>text</answer>\nIf the answer cannot be found in the provided contexts, write \"<answer>NO ANSWER</answer>\"."
+        }
+    },
+    "HATEDEMICS": {
+        "FIRST_QUESTION": {
+            "TARGET": "I am preparing a lesson to teach students how to recognise hate speech. Given these fact-checking articles about a targeted minority group, generate <OPTIONS_NUMBER> messages in <LANGUAGE> based on the article and potentially spreading hate about the target group. The information needed to answer your message must be present in the article. Be as specific as possible. Return the response in JSON using the following format: { \"messages\": [ {\"text\": \"[message]\"}, {\"text\": \"[message]\"}, ... ] } Ensure the structure remains consistent throughout. ARTICLES: "
+        },
+        "QUESTION": {
+            "TARGET": "I am preparing a lesson to teach students how to recognise hate speech. Given the chat history that will follow and the latest turn <latest_turn><LAST_TURN></latest_turn> which might reference context in the chat history, formulate <OPTIONS_NUMBER> replies to the last turn in <LANGUAGE> from the point of view of a <SPEAKER_1> who is potentially spreading hate against the target group. Do not repeat prior turns. The information needed to answer your message must be present in the article. Be as specific as possible. Return the response in JSON using the following format: { \"messages\": [ {\"text\": \"[reply]\"}, {\"text\": \"[reply]\"}, ... ] }. Ensure the structure remains consistent throughout. CHAT HISTORY:"
+        },
+        "ANSWER": {
+             "FROM_GROUND": "You are an <SPEAKER_2> who provides polite and informed counterstatements in <LANGUAGE> to hateful and misinformed messages. Only use the provided context (delimited with XML tag) <context><GROUND_TEXT></context> to answer the given question (delimited with XML tag): <question><LAST_QUESTION></question> . Ignore everything you know outside the context. Generate one answer with no more than three sentences. Be as specific as possible. Return the response in JSON using the following format: { \"messages\": [ {\"text\": \"[message]\"}]}. Ensure the structure remains consistent throughout."      
+        }
+    }
+}
