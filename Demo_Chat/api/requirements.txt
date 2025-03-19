@@ -12,3 +12,4 @@ peft
 bitsandbytes
 lorax-client
 huggingface_hub
+openai

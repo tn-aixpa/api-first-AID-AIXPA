@@ -6,7 +6,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import PeftModel
 from lorax import Client
-
+from openai import OpenAI
 # Global model and tokenizer variable, this will hold the loaded model once it's initialized
 model = None
 tokenizer = None
@@ -32,6 +32,29 @@ file_name = "README.md"
 local_path = hf_hub_download(repo_id=repo_id, filename=file_name, local_dir=local_folder)
 print(f"Adapter downloaded to: {local_path}")
 
+def get_openai_chat_format(turns):
+
+    if turns and turns[0]['speaker'] == "speaker_2":
+        turns.pop(0)
+    
+    openai_chat = []
+
+    if len(turns)> 0:
+        for turn in turns:
+            
+            turn_dict = dict()
+
+            if turn["speaker"] == "speaker_1":
+                turn_dict["role"] = "user" 
+                turn_dict["content"] = turn["turn_text"]
+                openai_chat.append(turn_dict)
+
+            if turn["speaker"] == "speaker_2":
+                turn_dict["role"] = "assistant" 
+                turn_dict["content"] = turn["turn_text"]
+                openai_chat.append(turn_dict)          
+
+    return(openai_chat)
 
 
 # Load keys and prompts
@@ -225,6 +248,127 @@ def aixpa_chatbot_local(documents_list, dialogue_list, user, language, lorax_cli
     return return_dict
 
 
+def aixpa_chatbot_kubeai (documents_list, dialogue_list, user, language, kubeai_client, hf_token):
+    
+    dialogue_list_extended = dialogue_list.copy()
+    write_list_to_file(dialogue_list_extended)
+
+    speaker = "speaker_2"
+
+    roles = {
+        "speaker_1": "user",
+        "speaker_2": "assistant",
+        "user": "speaker_1",
+        "assistant": "speaker_2"
+        } 
+    ground_required_dict =  {
+        "speaker_1": False,
+        "speaker_2": True
+        } 
+    
+    options_number = 3
+    
+    chunks = chunker.Chunker_llama_index(
+            documents_list  = documents_list, 
+            chunk_size    = 150,
+            chunk_overlap = 50
+            )    
+
+    dial= dialogue.Dialogue(turns = dialogue_list)
+    
+ 
+    retr = retrieval.Retriever_llamaindex_bm25(
+        knowledge_base=chunks,
+        name="BM25",
+        top_k=options_number
+        )
+
+    model_name =  "meta-llama/Llama-3.1-8B-Instruct"
+    tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
+    
+    prompt = '''You are an helpful assistant from the public administration, use a <<STYLE>> tone.
+    The user is a <<ROLE>>.
+    Your task is to provide a relevant answer to the user using the provided evidence and past dialogue history.
+    The evidence is contained in <document> tags.Be proactive asking for the information needed to help the user.
+    When you receive a question, answer by referring exclusively to the content of the document.
+    Answer in Italian.
+    <document><<DOCUMENTS>></document>'''
+
+
+
+    if user == "cittadino":
+        prompt = prompt.replace("<<ROLE>>", "Citizen")
+
+    if user == "operatore":
+        prompt = prompt.replace("<<ROLE>>", "Public Operator")
+
+    if language == "informale":
+        prompt = prompt.replace("<<STYLE>>", "informal")
+
+    if language == "formale":
+        prompt = prompt.replace("<<STYLE>>", "formal")
+    
+    prompt = prompt.replace("<<DOCUMENTS>>", "\n".join(documents_list))
+
+    openaidict_sys = dict()
+    openaidict_user = dict()
+
+    openaidict_sys["role"] = "system"
+    openaidict_sys["content"] = prompt
+    openaidict_user = get_openai_chat_format(dialogue_list)
+    # openaidict_user["role"] = "user"
+    # openaidict_user["content"] = dialogue_list[1]["turn_text"]
+    # chat_dict = [{"role": "system", "content": prompt}]
+    # if dialogue_list[0]['speaker'] == "speaker_2":
+    #     dialogue_list.pop(0)
+    openailist = []
+    openailist.append(openaidict_sys)
+    openailist.extend(openaidict_user)
+    print(openailist)
+    # for turn in dialogue_list[0:-1]:
+    # for turn in dialogue_list:
+    #     chat_dict.append({"role": roles[turn['speaker']], "content": turn['turn_text']})
+        
+    # tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
+    # inputs = tokenizer.apply_chat_template(chat_dict, tokenize=False)
+
+
+
+    client = OpenAI(
+        base_url = 'http://kubeai.kubeai.svc.cluster.local/openai/v1',
+        api_key='ollama', # required, but unused
+    )
+    message = client.chat.completions.create(
+        model="famiglia-llama-chat_llama-famiglia",
+        messages=openailist,
+        temperature=0.6,
+        max_completion_tokens=1000
+    ).choices[0].message.content
+
+    print(message)
+
+    return_dict = dict()
+    # message_parts = message.split("\n\n")
+    
+    # message_parts.pop(0)
+    # message = "\n\n".join(message_parts)
+    return_dict["message"] = message
+
+    
+    dialogue_list_extended.append({'speaker': 'speaker_2', 'turn_text': message})
+    write_list_to_file(dialogue_list_extended)
+
+    # return_dict = dict() #DA CANCELLARE
+    # message = "Servono politiche per la promozione del benessere familiare" #DA CANCELLARE
+    # return_dict["message"] = "Servono politiche per la promozione del benessere familiare" #DA CANCELLARE
+
+    chunks = retr.retrieve(message)
+    grounds_list = []
+    for c in chunks:
+        grounds_list.append(c.text)
+    return_dict["ground"] = grounds_list
+    # print(return_dict)
+    return(return_dict)
 
 
 def aixpa_chatbot_lorax (documents_list, dialogue_list, user, language, lorax_client, hf_token):
