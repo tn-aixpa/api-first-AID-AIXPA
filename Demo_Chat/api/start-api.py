@@ -106,4 +106,4 @@ def dialogue_generation_dynamic(request: DynamicDialogueGenerationRequest,token:
 
 if __name__ == '__main__':
 
-    uvicorn.run("start-api:app", host=args.host, port=args.port)
+    uvicorn.run("start-api:app", host=args.host, port=args.port, workers=10)
