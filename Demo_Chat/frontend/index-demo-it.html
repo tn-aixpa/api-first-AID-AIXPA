@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document and Chatbot</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+        }
+
+        .document-section {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 2px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chatbot-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-left: 2px solid #ddd;
+        }
+
+        .chatbot-header {
+            background-color: #0078D4;
+            color: white;
+            text-align: center;
+            padding: 10px;
+            font-size: 1.2em;
+        }
+
+        .chatbot-messages {
+            flex: 1;
+            padding: 10px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            margin: 5px 0;
+            padding: 10px;
+            border-radius: 10px;
+            max-width: 70%;
+            word-wrap: break-word;
+            display: flex;
+            align-items: center;
+            position: relative;
+        }
+
+        .bot-message {
+            align-self: flex-start;
+            background-color: #e0e0e0;
+            position: relative;
+            padding-left: 30px; /* Added space for icon */
+        }
+
+        .user-message {
+            align-self: flex-end;
+            background-color: #0078D4;
+            color: white;
+        }
+
+        .operator-icon {
+            position: absolute;
+            top: 9px;
+            left: 5px;
+            width: 20px;
+            height: 20px;
+            vertical-align: middle;
+            z-index: 1; /* Ensure the icon is on top of the text */
+        }
+
+        .reload-icon {
+            width: 20px;  /* Size of the icon */
+            height: 20px;
+        }
+        
+        .chatbot-input {
+            display: flex;
+            border-top: 2px solid #ddd;
+            padding: 10px;
+            justify-content: center; /* Center the buttons */
+            align-items: center; /* Center the input and buttons vertically */
+        }
+
+        .chatbot-input input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-right: 10px; /* Space between the input and the buttons */
+        }
+
+        .chatbot-input button {
+            padding: 10px 15px;
+            border: none;
+            background-color: #0078D4;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 40px;
+            margin: 0 5px; /* Add space between buttons */
+        }
+
+        .chatbot-input button:hover {
+            background-color: #005A9E;
+        }
+
+        .load-button {
+            margin: 10px 0;
+            padding: 5px 10px;
+            border: none;
+            background-color: #0078D4;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            align-self: flex-start;
+        }
+
+        .load-button:hover {
+            background-color: #005A9E;
+        }
+
+        pre {
+            flex: 1;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: #f4f4f4;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+        }
+
+        .highlight {
+            background-color: lightblue;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="container">
+        <div class="document-section">
+            <!-- <button @click="triggerFileLoad" class="load-button">Load Document</button>
+            <input type="file" id="fileInput" @change="loadFile" style="display: none;"> -->
+            <pre v-html="highlightedDocument" v-if="documentContent"></pre>
+            <h1 v-else>Load a document to display its content</h1>
+        </div>
+
+        <div class="chatbot-section">
+            <div class="chatbot-header">Chatbot</div>
+            <div class="chatbot-messages" ref="chatMessages">
+                <div v-for="(message, index) in messages" :key="index" 
+                     :class="['message', message.sender === 'You' ? 'user-message' : 'bot-message']"
+                     @click="highlightMessageGrounds(message.text)">
+                    <template v-if="message.sender === 'Bot'">
+                        <img src="operator-icon.png" alt="Operator Icon" class="operator-icon">
+                        <span v-html="formatMessage(message.text)"></span>
+                    </template>
+                    <template v-else>
+                        {{ message.text }}
+                    </template>
+                </div>
+            </div>
+            <div class="chatbot-input">
+                <input type="text" v-model="userMessage" placeholder="Digita qui il tuo messaggio..." :disabled="isWaiting" @keyup.enter="sendMessage">
+                <button @click="sendMessage" :disabled="isWaiting">
+                    <span v-if="isWaiting">Inviato...</span>
+                    <span v-else>Invia</span>
+                </button>
+                <button @click="reloadLastMessage" :disabled="isWaiting || !lastMessage" class="load-button">
+                    <!-- Reload Icon (Image) -->
+                    <img src="reload.png" alt="Reload Icon" class="reload-icon" />
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                documentContent: `=== PIANO FAMIGLIA DI ARCO ANNO 2022 ===
+Il Comune di Arco ha ottenuto nell'ottobre 2007, primo Comune del Trentino, l'assegnazione del Marchio Family in virtù dell'offerta di servizi rispondenti alle aspettative sia delle famiglie residenti che delle famiglie ospiti, che scelgono di trascorrere le vacanze su questo territorio. 
+La pandemia,  ancora presente con fasi cicliche più o meno intense dal mese di marzo 2020, ha cambiato profondamente le condizioni di vita delle famiglie italiane: il reddito, i consumi, le modalitа di fruizione del tempo libero e della socializzazione in un triennio sono profondamente mutate.
+Da un lato, sono affiorati processi di forte individualizzazione ed isolamento  che hanno coinvolto bambini, giovani, adulti e anziani; dall'altro, quasi specularmente, sono nate nuove forme di collaborazioni e vicinanza, alle volte inaspettate.
+I tempi moderni richiedono quindi approcci creativi, capacitа di resistenza e resilienza, non solo per assorbire le crisi, ma per rispondere ad esse in termini trasformativi, generativi, propositivi:
+- con un coinvolgimento delle famiglie, soggetti che hanno dimostrato di possedere capacitа di adattamento e nuove competenze per reagire, creando rapporti di cura sia al proprio interno che nell'ambito della comunitа di appartenenza;
+- supportando la crescita di nuove forme di socialitа e la costruzione di nuove forme associative.
+I tempi moderni richiedono risposte pubbliche rinnovate, flessibili e funzionali ai nuovi modi di vivere, di lavorare e di produrre.
+Anche nella stesura di un piano famiglia , l'ente Comune è dunque conseguentemente chiamato ad affrontare questa sfida adottando una nuova grammatica e un nuovo linguaggio, per poter dialogare con le famiglie e la comunitа, faciltandole ad ''abitare - al meglio-  le possibilitа'' (Emily Dickinson - 1862) offerte dall'epoca presente.
+
+
+=== AZIONI ===
+
+TITOLO: FASE DI MANTENIMENTO CERTIFICAZIONE FAMILY AUDIT
+TASSONOMIA: Adesione  ai marchi familiari
+MACRO-AMBITO: Governance e azioni di rete
+OBIETTIVO: Con il coordinamento del nuovo team direttivo e la collaborazione con il gruppo di lavoro interno, (rappresentativo dei vari servizi e aree comunali) l'obiettivo è quello di proseguire, consolidare e rinnovare le politiche di conciliazione famiglia lavoro a beneficio dei dipendenti del Comune di Arco, identificando azioni e progettualitа adatte alle mutate condizioni del contesto lavorativo, familiare e sociale dei lavoratori.
+DESCRIZIONE: A seguito dell'ottenimento del certificato Family Audit Executive (2020) e di una fase di profonda riorganizzazione dell'assetto organizzativo della struttura e dell'organico comunale (con un turnover sia del gruppo di direzione che del personale), nel 2022 verrа ripreso e consolidato il percorso per il  mantenimento della certificazione.
+-----
+
+TITOLO: DISTRETTO FAMIGLIA ALTO GARDA E LEDRO
+TASSONOMIA: Adesione  ai marchi familiari
+MACRO-AMBITO: Governance e azioni di rete
+OBIETTIVO: Obiettivo guida è il consolidamento del lavoro di rete dei soggetti aderenti al Distretto e dell'equipe tecnica per la stesura del Programma di Lavoro anno 2022 che mira:
+- all'identificazione del progetto strategico, con azioni a sostegno dell'emergenza profughi ucraini; 
+- al consolidamento degli strumenti comunicativi e promozionali delle iniziative attivate sul territorio distrettuale e rivolte alle famiglie: tanti eventi, appuntamenti e attivitа per bambini e ragazzi, incontri e occasioni di formazione per genitori, educatori ed adulti, ma anche consigli, opportunitа di collaborazione e notizie dal mondo delle politiche familiari. 
+http://www.altogardafamily.it/
+DESCRIZIONE: Un distretto famiglia è una rete composta dalle forze  sociali, economiche, culturali e ambientali che operano nelle comunitа locali e scelgono di costruire insieme iniziative, servizi e politiche  orientate al benessere delle famiglie.
+L'attivitа del Distretto Famiglia Alto Garda e Ledro, con la presenza attiva di 4 Comuni certificati ''Amici della famiglia''  (Arco, Riva del Garda, Ledro, Dro) e di altre organizzazioni pubbliche/private a marchio family (cooperative sociali,  associazioni di volontariato, associazioni di categoria etc.), vuole rafforzare il percorso di certificazione territoriale familiare, al fine di accrescere, tramite il rafforzamento del sistema dei servizi e delle iniziative per la famiglia, l'attrattivitа territoriale. Il senso del percorso è quello di attribuire cittadinanza al soggetto famiglia all’interno delle azioni amministrative dei Comuni.
+Le iniziative del Distretto vegono coordinate da un manager territoriale e da un'equipe tecnica in rappresentanza dei 4 Comuni sopra citati, permettendo una diffusione capillare ed integrata delle iniziative su un territorio accogliente e sempre più orientato ai bisogni delle famiglie (residenti o ospiti).
+-----
+
+TITOLO: PIANO B: IL PIANO GIOVANI DELL'ALTO GARDA
+TASSONOMIA: Adesione/supporto al piano giovani
+MACRO-AMBITO: Governance e azioni di rete
+OBIETTIVO: Piano B si rivolge a giovani dagli 11 ai 29 anni e a tutti coloro che  intendono ''spendere'' parte delle proprie energie e del proprio tempo al  servizio della collettivitа.
+Ha come obiettivo quello di essere strumento generativo di idee, passioni ed impegno del mondo giovanile.
+https://www.pianob.cloud/
+DESCRIZIONE: Un Piano Giovani di Zona (PGZ) è uno strumento di cui  un territorio si avvale ai fini di creare una cultura delle politiche  giovanili incentivando le iniziative organizzate dai giovani o a favore dei giovani, osservando la condizione giovanile del territorio,  diventando stimolo per le istituzioni e la cittadinanza attiva,  lavorando sulla costruzione dell’autonomia, aprendo alla dimensione  globale senza dimenticare il locale e le proprie radici.
+Piano B  è  reso possibile dalla Legge provinciale  “Giovani” n.5/2007 e costituisce una libera iniziativa della Comunitа  Alto Garda e Ledro e dei 7 Comuni di: Arco, Drena, Dro, Ledro,  Nago-Torbole, Riva del Garda, Tenno.
+Piano B trova sede logistica e operativitа presso la struttura del centro giovani Cantiere 26, ubicata nel Comune di Arco.
+-----
+
+TITOLO: PROGETTO ''LUOGO COMUNE '': nuovo spazio di relazione sociale
+TASSONOMIA: Interventi per rafforzare la rete
+MACRO-AMBITO: Governance e azioni di rete
+OBIETTIVO: I locali saranno destinati all’attivazione di  progettualitа con ''finalitа sociali e di sviluppo di comunitа'', quali:
+- attivazione di uno spazio socio-socioculturale per ospitare iniziative rivolte ai profughi ucraini e alle famiglie arcensi accoglienti (corsi di italiano, sportello psicologi dei popoli et.)
+- attivazione di uno spazio di socializzazione rivolto all'area delle  nuove vulnerabilitа, ovvero di un universo ampio di persone che non hanno bisogni specifici, se non quello, sempre più emergente, di  relazioni sociali strutturate e della valorizzazione delle competenze  professionali, di fronte all'acuirsi di fenomeni come l'impoverimento,  la diffidenza reciproca, la chiusura privatistica, la depressione,l'indebitamento.
+DESCRIZIONE: A seguito del ritorno in disponibilitа al Comune di Arco di alcuni locali destinati a mensa per anziani, (servizio non più attivo dal 2021) l'amministrazione, in collaborazione con il servizio socio-assistenziale della Comunitа di Valle Alto Garda e Ledro e con alcuni soggetti del terzo settore del territorio, intende avviare nel 2022 lo sviluppo di azioni di ''welfare di comunitа'' che troveranno sede presso tali spazi.
+Il progetto vuole in sintesi sostenere la costruzione e promozione di reti di comunitа.
+-----
+
+TITOLO: CONTRIBUTO PER PANNOLINI LAVABILI
+TASSONOMIA: Promozione della natalitа (Bonus bebè, kit nuovi nati ecc.)
+MACRO-AMBITO: Misure economiche
+OBIETTIVO: L'utilizzo di questi prodotti comporta, rispetto ai pannolini usa e getta, un rilevante risparmio economico per le famiglie, una maggior tutela della salute del bambino (lasciando traspirare la pelle) e una  significativa riduzione della quantitа di rifiuti indifferenziati da smaltire.
+DESCRIZIONE: L’Amministrazione comunale, dal 2009 registrata con certificazione ambientale Emas, prosegue la promozione dell’acquisto di pannolini lavabili per bambini/e, grazie alla messa a disposizione delle famiglie residenti di un contributo pari al 50% del prezzo fissato dal rivenditore per l'acquisto del kit base completo di pannolini lavabili, per la fascia di etа 0-3 anni.
+-----
+
+TITOLO: R...ESTATE INSIEME 2022
+TASSONOMIA: Agevolazioni tariffarie e contributi per servizi educativi e di conciliazione
+MACRO-AMBITO: Misure economiche
+OBIETTIVO: Il progetto, che viene attivato, con cadenza annuale, da più di vent'anni dal Comune di Arco, ha come obiettivo quello di sostenere i servizi di conciliazione dei tempi famiglia-lavoro fruiti dalle famiglie arcensi durante il periodo estivo, supportando parimenti le attivitа organizzate dalle associazioni locali.
+DESCRIZIONE: Il progetto prevede l'abbattimento della quota di iscrizione ai corsi estivi organizzati dalle associazioni aderenti iscritte all'Albo (prioritariamente sportive) e rivolti a bambini/e e ragazzi/e in etа scolare residenti nel Comune di Arco.
+-----
+
+TITOLO: TAGESMUTTER: MAMME DI GIORNO
+TASSONOMIA: Agevolazioni tariffarie e contributi per servizi educativi e di conciliazione
+MACRO-AMBITO: Misure economiche
+OBIETTIVO: Garantire la massima fruibilitа di un servizio di conciliazione flessibile  (fruibile ad ore) e modellato sui bisogni delle famiglie (attivo sabato e domenica, fasce orarie flessibili etc).
+DESCRIZIONE: Il servizio Tagesmutter, secondo il modello trentino, consente alle famiglie di ''affidare in modo stabile e continuativo i propri  figli a operatrici (Tagesmutter) appositamente formate che, professionalmente, in collegamento con organismi della cooperazione sociale o di utilitа non lucrativi, forniscono educazione e cura a uno o più bambini  presso il proprio domicilio o altro ambiente adeguato ad offrire cure familiari (L.P. 4/2002, art. 4, comma 2).
+Il Comune riconosce e sostiene il nido famigliare- servizio Tagesmutter quale servizio complementare al nido d'infanzia ed eroga un contributo orario alle famiglie beneficiarie, diretto alla copertura parziale del costo sostenuto per la fruizione del servizio, determinato sulla base delle condizioni familiari, reddituali e patrimoniali del richiedente.
+-----
+
+TITOLO: VOUCHER SPORTIVO PER LE FAMIGLIE
+TASSONOMIA: Agevolazioni tariffarie e contributi attivitа ricreative/culturali/aggregative/formative
+MACRO-AMBITO: Misure economiche
+OBIETTIVO: Collaborare con l'Agenzia provinciale per la coesione sociale, per promuovere il progetto finalizzato a sostenere le famiglie in difficoltа economica e le famiglie numerose (con più di 3 figli), agevolando la partecipazione dei minori alle attivitа sportive quali strumenti di crescita per l'individuo e per lo sviluppo del sistema locale.
+DESCRIZIONE: Adesione al progetto Voucher sportivo per le famiglie, organizzato e promosso dall'Agenzia provinciale per la coesione sociale.
+-----
+
+TITOLO: Adesione al progetto Family Swim
+TASSONOMIA: Agevolazioni tariffarie e contributi attivitа ricreative/culturali/aggregative/formative
+MACRO-AMBITO: Misure economiche
+OBIETTIVO: Promuovere la diffusione della card vantaggi Euregio Family Pass (che per le famiglie è gratuita) e le occasioni di trascorre del tempo assieme tra minori e adulti (genitori o nonni).
+https://fcard.trentinofamiglia.it/
+DESCRIZIONE: Nel 2022 verrа sottoscritto un accordo tra la Provincia Autonoma di Trento (Agenzia per la coesione sociale) e Amsa (azienda municipale sviluppo Arco) per l'attivazione, presso la piscina comunale di Prabi, del progetto ''Swim Family in Trentino'' destinato a tutte le famiglie con figli minorenni, in possesso dell'Euregio Family Pass, (la carta vantaggi che viene utilizzata dalle famiglie nei 3 territori dell'Euregio: Trentino, Alto Adige e Tirolo).
+Ai possessori dell'Euregio Family Pass verrа riconosciuto lo sconto del  20% sulla tariffa di ingresso per bambini/e e ragazzi di etа inferiore  ai 18 anni, a fronte del pagamento della tariffa intera da parte dell'adulto, se in possesso della tessera EuregioFamily Pass nominativa.
+Ciò anche a beneficio delle famiglie di turisti sud tirolesi che trascorrono le proprie vacanze sul territorio dell'Alto Garda.
+-----
+
+TITOLO: www.altogardafamily.it . la promozione del distretto famiglia Alto Garda
+TASSONOMIA: Strumenti di comunicazione
+MACRO-AMBITO: Informazione e comunicazione
+OBIETTIVO: Consolidamento degli strumenti comunicativi e promozionali delle  iniziative attivate sul territorio distrettuale e rivolte alle famiglie: tanti eventi, appuntamenti e attivitа per bambini e ragazzi, incontri e occasioni di formazione per genitori, educatori ed adulti, ma anche  consigli, opportunitа di collaborazione e notizie dal mondo delle  politiche familiari. 
+DESCRIZIONE: Le limitazioni imposte dalla pandemia hanno accelerato la transizione verso le  relazioni digitali e le interazioni a distanza. Grazie alla tecnologia è cambiato così il modo di comunicare tra genitori e figli, ma anche tra istituzioni/enti e famiglie.
+Gli enti aderenti al Distretto Famiglia Alto Garda hanno quindi intenso intensificare, in modo sistemico, il flusso informativo e promozionale degli eventi/attivitа organizzate sul territorio tramite:
+-  il portale http://www.altogardafamily.it/
+- l'attivazione di canali social dedicati (FB e Instagram).
+-----
+
+TITOLO: CENTRO GIOVANI CANTIERE 26
+TASSONOMIA: Centri di aggregazione per giovani
+MACRO-AMBITO: Comunitа educante
+OBIETTIVO: Il centro giovani Cantiere 26 è un centro socio-culturale che mira:
+- all’autodeterminazione dei giovani e delle associazioni giovanili
+- alla promozione del  protagonismo dei giovani e alla loro autonomia, quali portatori di innovazione e spinta propulsiva essenziale nella governance del territorio.
+DESCRIZIONE: Situato a pochi chilometri dal lago e sotto il Castello di Arco, il centro giovani Cantiere 26 rivolto in via prioritaria ad adolescenti, giovani,  giovani adulti (14- 30 anni), è un grande spazio culturale e ricreativo: dispone di bar per pasti veloci e aperitivi, wi-fi free, sala prove, open space e aule per corsi e formazioni.
+Un luogo ideale per studiare o leggere un libro, lavorare al computer o fare due chiacchiere tra amici. All’esterno si trovano un parco, due campi sportivi per basket, skating e calcetto. 
+A C26 si può assistere a concerti, spettacoli teatrali, conferenze, mostre, proiezioni cinematografiche, workshop e numerosi eventi e laboratori promossi dalle associazioni giovanili del territorio, in collaborazione con il piano giovani di zona Piano B.
+http://www.cantiere26.it/
+-----
+
+TITOLO: FALESIA DI ARRAMPICATA FAMILY
+TASSONOMIA: Turismo a misura di famiglia (servizi ricettivi, accoglienza ecc.)
+MACRO-AMBITO: Comunitа educante
+OBIETTIVO: Nel 2022, dopo questi primi anni di attivitа, verrа avviato un percorso di riqualificazione dell'area (potenziamento delle infrastrutture presenti, dei percorsi di accesso, cartellonistica con pittogrammi etc).
+DESCRIZIONE: Il Comune di Arco, fin dai primi anni '90, ha intrapreso un'azione di valorizzazione delle falesie di arrampicata presenti sul proprio territorio, iniziativa, in quegli anni, unica a livello mondiale. 
+Quest'azione si è poi sviluppata negli anni 2000, con il Piano Generale delle Falesie, confluendo poi, a partire dal 2008, nel progetto Outdoor Park Garda Trentino, (svolto in collaborazione con Apt Ingarda), caratterizzando la cittа di Arco sempre più quale capitale mondiale del climbing.
+Nel 2015, in localitа San Martino, è stata realizzata la prima falesia per arrampicata rivolta alle famiglie.
+-----
+
+TITOLO: FESTA DELLO SPORT
+TASSONOMIA: Promozione e organizzazione di eventi sportivi (giornata dello sport, escursioni, ecc)
+MACRO-AMBITO: Comunitа educante
+OBIETTIVO: Far conoscere alle famiglie, in prossimitа delle iscrizioni alle attivitа annuali, le discipline sportive attivate delle associazioni che operano sul territorio, promuovendo tra i bambini/e e i giovani la pratica sportiva.
+DESCRIZIONE: La festa dello sport viene svolta, con cadenza annuale, durante una delle quattro domeniche del mese di settembre, invitando nel centro storico di Arco, le varie associazioni sportive che, installando dei corner pratico-promozionali, permettono a bambini/e, ragazzi/e e famiglie di conoscere e sperimentare le più varie discipline sportive, prima dell'iscrizione alle attivitа autunnali.
+-----
+
+TITOLO: SERVIZIO CIVILE
+TASSONOMIA: Progetti di partecipazione attiva di bambini, ragazzi e giovani (consiglio comunale dei ragazzi..)
+MACRO-AMBITO: Comunitа educante
+OBIETTIVO: Nel 2022 si ha come obiettivo l'attivazione dei seguenti due progetti di servizio civile nel settore:
+- Ambiente: ''Emas. Arco tutela l'ambiente e il futuro'', supporto per il rinnovo della registrazione Emas del Comune di Arco e nell’elaborazione del nuovo programma ambientale;
+- Biblioteca Bruno Emmert: ''Sfide e opportunitа per la biblioteca oggi: dai fondi storici al web - anno IV''.
+DESCRIZIONE: Nel 2022 verranno rinnovati i progetti di servizio civile realizzati in vari ambiti degli uffici comunali, riconoscendo tali progettualitа:
+- per il giovane, un'occasione di transizione all’etа adulta e di avvicinamento al mondo del lavoro, oltre che un’esperienza per completare il proprio percorso formativo in vista dell’approdo lavorativo;
+- per l’amministrazione comunale, un'opportunitа per consentire lo svolgimento dei compiti che il giovane è chiamato a effettuare, secondo un progetto precedentemente redatto dalla stessa amministrazione comunale, sulla base di una serie di obiettivi.
+-----
+
+TITOLO: CENTRO SOCIO-EDUCATIVO TERRITORIALE FRISBEE (ATTIVITA' ANNUALE E COLONIA ESTIVA)
+TASSONOMIA: Centri di aggregazione per giovani
+MACRO-AMBITO: Comunitа educante
+OBIETTIVO: Nel corso del 2021 si intende potenziare l’attivitа del centro “Frisbee”, presso il primo piano di villa Althamer, anche in collaborazione con il limitrofo Istituto comprensivo di Arco e attivare specifiche progettualitа a supporto di alcuni gruppi a rischio di disagio giovanile presenti sul territorio comunale. 
+https://www.casamiariva.it/Servizi/Semiresidenziali/Centri-Socio-Educativi/Comune-di-Arco/Centro-Socio-Educativo-Frisbee
+DESCRIZIONE: Presso il Comune di Arco, nel novembre 2019 è stato inaugurato il centro socio territoriale Frisbee, appartenente al sistema dei centri socio educativi territoriali (CSET) per minori e famiglie, gestito da CasaMia apsp su mandato della Comunitа di Valle per tutto il territorio dell’Alto Garda e Ledro.
+Durante il periodo estivo vegono svolte attivitа di colonia estiva sia presso il centro Frisbee (fascia d'etа: scuola secondaria) che presso gli spazi della scuola elementare G. Segantini (fascia d'etа: scuola primaria).
+-----
+
+TITOLO: CI STO? AFFARE FATICA!
+TASSONOMIA: Progetti di partecipazione attiva di bambini, ragazzi e giovani (consiglio comunale dei ragazzi..)
+MACRO-AMBITO: Comunitа educante
+OBIETTIVO: Il progetto vuole recuperare il prezioso contributo educativo e formativo dell'impegno civico di ragazzi e ragazze, in particolare di quello manuale, valorizzando il tempo estivo, un tempo critico, spesso vuoto di esperienze e perciò di significato.
+DESCRIZIONE: “Ci sto? Affare fatica?” è un progetto estivo che coinvolge ragazzi/e dai 14 ai 19 anni, che hanno voglia di mettersi in gioco, conoscere nuove persone e sporcarsi le mani per rendere il proprio territorio un posto migliore. 
+Il progetto prevede la costituzione di gruppi di una decina di ragazzi/e che, affiancati da un volontario adulto e da un giovane volontario, svolgeranno attivitа concrete di volontariato e cura dei beni comuni. 
+Ai partecipanti viene riconosciuto un “buono fatica” (ovvero un buono spesa) del valore di €50 da spendere in una rete di negozi nei Comuni che aderiscono all’iniziativa per spese alimentari, abbigliamento, libri scolastici, sport e tempo libero. Anche ai tutor viene riconosciuto un “buono fatica”, del valore di €100.
+https://www.cistoaffarefatica.it/
+-----
+
+TITOLO: STORIE DI DONNA - concorso letterario
+TASSONOMIA: Azioni di contrasto alle dipendenze
+MACRO-AMBITO: Comunitа educante
+OBIETTIVO: Con l'obiettivo di dare voce e visibilitа al tema della ludopatia e delle dipendenze, oltre alla sezione generale (a tema libero, più un premio supplementare sul tema «L’identitа di genere») è stata attivata la sezione speciale  «Premio San Pancrazio»  incentrata su tre i temi: la dipendenza dall’alcool, il gioco d’azzardo e la medicina di genere, sezione organizzata in collaborazione con l’ospedale San Pancrazio (Gruppo Santo Stefano Riabilitazione).
+DESCRIZIONE: Il concorso letterario STORIE DI DONNE è un'iniziativa organizzata dall’assessorato alla cultura del Comune di Arco tramite la biblioteca civica «Bruno Emmert», nata dalla volontа di dare spazio alle voci femminili o a chi abbia voglia di riflettere e di raccontare la vita, le esperienze e i sogni del mondo femminile, tramite racconti brevi (non oltre 9000 battute, non più di tre racconti)  dedicati all’universo femminile, scritti sia da donne, sia (novitа del 2022) da uomini.
+-----
+
+TITOLO: PICCOLA BIBLIOTECA DELLA PACE
+TASSONOMIA: Progetti di partecipazione attiva di bambini, ragazzi e giovani (consiglio comunale dei ragazzi..)
+MACRO-AMBITO: Comunitа educante
+OBIETTIVO: Offrire agli alunni uno spazio di confrontro e di sostegno, stimolando una riflessione sui valori dell'accoglienza e sull'importanza del contributo di ogni singola persona.
+DESCRIZIONE: Progetto nato dall'idea di alcuni consiglieri comunali a seguito della crisi tra Ucraina e Russia, al fine di supportare le nuove generazioni che quotidianamente entrano in conttatto con notizie e immagini feroci e che necessitano di spiegazioni adeguate da parte della comunitа educante. 
+Viene regalata alle scuole del territorio (istruzione prescolastica, scuola primaria e secondaria di primo grado) una piccola biblioteca composta di 3 testi, con l'idea che tale gesto possa essere un primo nucleo attorno al quale sviluppare altre future acquisizioni librarie.
+-----
+
+TITOLO: PARCO NELSON MANDELA (BRAILE) E ORTI PER ANZIANI E FAMIGLIE
+TASSONOMIA: Pianificazione urbanistica (strade, parchi, orti, campi sportivi ecc.)
+MACRO-AMBITO: Welfare territoriale e sostenibilitа
+OBIETTIVO: L'attivitа proposta nel parco urbano Nelson Mandela mira a:
+- offrire ai cittadini di tutte le etа una zona verde funzionale, che possa essere luogo di socialitа ed incontro;
+- consolidare l'attivitа di coltivazione degli orti pubblici, come possibile fonte di risorse economiche e alimentari, ma anche come forma di sviluppo e di arricchimento del rapporto famigliare e di vicinato tra i soggetti assegnatari dei vari lotti.
+DESCRIZIONE: Inaugurato nel 2015, il Parco Nelsol Mandela (situato in localitа Braile), è il parco più grande dell’Alto Garda, con un’estensione di quasi tre ettari circondati da una pista ciclabile. 
+Il parco costituisce un punto di riferimento “verde” per la Comunitа, un luogo di incontro all’aria aperta, particolarmente prezioso per i cittadini desiderosi di stare all’aria aperta dopo mesi di lock down. Negli ultimi anni si sono realizzate numerose e diverse iniziative nell’ambito di tale progetto, attraverso un percorso di gestione partecipata degli orti urbani e delle aree verdi, coinvolgendo scuole, associazioni, famiglie e singoli cittadini, favorendo la cultura della tutela e condivisione degli spazi verdi pubblici.
+Presso il parco sono presenti:
+- 49 orti pubblici (assegnati con apposito bando per il triennio 2021/2023), suddivisi in n. 25 orti di tipologia A ''orti per la terza etа''  e n. 24 orti di tipologia B ''Orti per i cittadini'', oltre a n. 3 orti sociali dedicati l'organizzazione di attivitа con scuole ed associazioni;
+- una pista di pump truck per bambini e un'area con attrezzatura per esercizi calisthenics;
+- un Chiosco denominato “Sottotetto Urban Space”, attualmente gestito dall’associazione La Busa Consapevole. Il Chiosco è dotato di uno spazio coperto da tettoria, il cui accesso è libero per tutti i fruitori del parco, senza obbligo di consumazione.
+-----
+
+TITOLO: PIEDIBUS
+TASSONOMIA: Progetti per favorire l’autonomia dei bambini (Pedibus, Nonno vigile, ecc.)
+MACRO-AMBITO: Welfare territoriale e sostenibilitа
+OBIETTIVO: Piedibus:
+- contribuisce  a trasmettere il valore della ''bellezza del camminare'', coniugando l'attivitа fisica con la conoscenza del proprio quartiere;
+- insegna ai più piccoli quanto sia importante tutelare e rispettare l'ambiente a partire dalle proprie abitudini quotidiane.
+DESCRIZIONE: Il Piedibus è il modo più sano, sicuro, divertente ed ecologico per andare e tornare da scuola. 
+Il Piedibus è un autubus umano, formato da un gruppo di bambini ''passeggeri'' e da adulti ''autisti e controllori''. 
+Il progetto è attivo per le scuole primarie di Arco, Bolognano e Romarzollo e vede il coinvolgimento di bambini, genitori e nonni volontari.
+-----
+
+TITOLO: CACCIA ALLA RISPOSTA - CERTIFICAZIONE EMAS
+TASSONOMIA: Certificazioni ambientali
+MACRO-AMBITO: Welfare territoriale e sostenibilitа
+OBIETTIVO: Nell'ambito delle azioni di consolidamento della certificazione ambientale Emas, si intende implementare la conoscenza del territorio comunale ed consolidare la diffusione dei comportamenti a tutela del territorio e dell'ambiente.
+DESCRIZIONE: Caccia alla risposta è una nuova iniziativa del Comune di Arco, un gioco diffuso sull'intero territorio comunale pensato per promuovere, tra residenti ed ospiti, l'impegno dell'Amministrazione comunale per la tutela e la sostenibilitа ambientale. 
+Armati di mappa, i partecipanti si avventurano per il Comune di Arco e possono imparare, in modo interrativo e divertente, quali piccoli elementi della vita quotidiana possono contribuire alla cura dell'ambiente. 
+Sul territorio del Comune di Arco sono nascosti 24 indizi, che possono essere scoperti tramite l'utilizzo della mappa interattiva e visitati a piedi o in bicicletta. Il completamento del percorso prevede l'assegnazione di un omaggio da parte del Comune.
+-----
+
+TITOLO: BIBLIOTECA E FONDO ANTICO BRUNO EMMERT - ATTIVITA'
+TASSONOMIA: Biblioteca family-oriented / media library
+MACRO-AMBITO: Welfare territoriale e sostenibilitа
+OBIETTIVO: Offrire alla cittadinanza e agli ospiti temporanei un accogliente e prestigioso punto di riferimento della cultura e per l’informazione, adeguandosi alle richieste del pubblico e dei tempi.
+DESCRIZIONE: La biblioteca comunale Bruno Emmert riserva ai suoi utenti una serie di iniziative di cui dа tempestiva informazione attraverso i tradizionali mezzi di comunicazione (bacheche, depliant, quotidiani, sito).
+Di seguito alcune delle iniziative attivate:
+- ''Crescere in biblioteca'' appuntamenti in biblioteca riservati a mamme e/o papа con bambini da 0 a 3 anni (laboratori emozionali: crescere con il gioco, crescere con la musica, crescere con i libri);
+- ''Storie a merenda'': racconti animati riservati a bambini delle scuole materne e del primo ciclo di scuola elementare che terminano con la distribuzione della merenda ad ogni bimbo presente; 'Tell me a story', racconti in inglese per bambini;
+- ''Percorsi didattici'' : agli studenti di ogni ordine e grado è riservata una vasta gamma di proposte culturali che vogliono introdurre alla conoscenza della biblioteca, stimolandone un uso più frequente e spontaneo.
+Incontri per adulti:
+-'' Il Piacere dell'Incontro'': la biblioteca offre spazio e  supporto librario a 2 gruppi di lettura autonomi che si incontrano mensilmente per discutere i temi affrontati nei testi prescelti. 
+- ''Incontro con l'autore'': periodicamente vengono invitati scrittori/scrittrici per offrire al pubblico un'occasione di conoscenza diretta con gli autori e le loro opere.
+- Conversazioni in lingua inglese: a cadenza settimanale, una sera a settimana, viene offerto uno spazio dedicato per chi vuole ripassare/colloquiare in lingua straniera con un conduttore madrelingua. 
+- ''Le Vetrine'': iniziativa che parte dall'allestimento di una vera e propria vetrina di libri e documenti 
+relativi ad un argomento ogni volta diverso. Conferenze, dibattiti, film o laboratori a tema ne costituiscono la cornice. (La biblioteca del Benessere in autunno, Dedicato alle Donne in marzo, La Biblioteca …per la Pace, etc.).
+-----
+
+TITOLO: ARCO CITTA' CHE ACCOGLIE - emergenza profughi ucraini
+TASSONOMIA: Servizi integrativi: Spazio genitori/bambini, spazio gioco
+MACRO-AMBITO: Welfare territoriale e sostenibilitа
+OBIETTIVO: Verranno attivati:
+- corsi di italiano per profughi presso la Biblioteca comunale, in collaborazione con l'associazione Il Gioco degli Specchi;
+- momenti di socializzazione rivolti alle famgilie (presso il centro giovani Cantiere 26 e l'Oratorio di Arco), in collaborazione con scout Agesci, Croce Rossa Sezione Alto Garda etc., coordinando tale attivitа con tutti i Comuni aderenti al Distretto famiglia Alto Garda e Ledro. 
+DESCRIZIONE: In considerazione dei riflessi tangibili che la guerra in Ucraina ha prodotto anche sul territorio dell'Alto Garda, il Comune ha inteso orientare una parte delle proprie azioni a supporto dei profughi ucraini e delle famiglie accoglienti residenti.
+La progettualitа, in progress, verrа aggiornata in base alla rilevazione di nuove esigenze, mantenendo un contatto ed un confronto con il servizio proviciale Cinformi e con l'associazione Rasom - ucraini residenti in Trentino.
+-----
+`,
+                userMessage: '',
+                messages: [
+                    { sender: 'Bot', text: 'Buongiorno come posso aiutare?' }
+                ],
+                groundSnippets: [],
+                messageGroundMap: {},
+                isWaiting: false,
+                lastMessage: null,
+                lastPayload: null,
+                lastResponse: null
+            },
+            
+            computed: {
+                highlightedDocument() {
+                    if (!this.documentContent) return '';
+                    const regexArray = this.groundSnippets.map(keyword => new RegExp(`(${this.escapeRegex(keyword)})`, 'gi'));
+                    let highlightedContent = this.documentContent;
+                    regexArray.forEach(regex => {
+                        highlightedContent = highlightedContent.replace(regex, '<span class="highlight">$1</span>');
+                    });
+                    return highlightedContent;
+                }
+            },
+
+            methods: {
+                formatMessage(text) {
+                    const trimmedText = text.replace(/^\n+/, '');
+                    const escapedText = trimmedText
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;');
+                    return escapedText.replace(/\n/g, '<br>');
+                },
+
+                escapeRegex(string) {
+                    return string.replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
+                },
+
+                triggerFileLoad() {
+                    document.getElementById('fileInput').click();
+                },
+
+                loadFile(event) {
+                    const file = event.target.files[0];
+                    if (file && file.type === 'text/plain') {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            this.documentContent = e.target.result;
+                        };
+                        reader.readAsText(file);
+                    } else {
+                        alert('Please upload a plain text file.');
+                    }
+                },
+
+
+                async sendMessage() {
+                    if (!this.userMessage.trim()) return;
+
+                    // Add user's message
+                    this.messages.push({ sender: 'You', text: this.userMessage });
+
+                    // Add processing message
+                    const processingMessage = { sender: 'Bot', text: 'Elaboro la risposta...' };
+                    this.messages.push(processingMessage);
+
+                    // Clear input and set waiting state
+                    const currentMessage = this.userMessage;
+                    this.userMessage = '';
+                    this.isWaiting = true;
+
+                    // Track the last message and payload
+                    this.lastMessage = currentMessage;
+
+                    // Scroll to bottom after user sends message and processing message is added
+                    this.scrollToBottom();
+
+                    try {
+                        // Prepare the dialogue without the last bot message
+                        const filteredDialogue = this.messages.slice();
+                        if (filteredDialogue.length > 0 && filteredDialogue[filteredDialogue.length - 1].sender === 'Bot') {
+                            filteredDialogue.pop();
+                        }
+
+                        // Prepare the JSON payload
+                        const payload = {
+                            generation_mode: "aixpa_chatbot_local",
+                            documents: this.documentContent ? [this.documentContent] : [],
+                            dialogue: filteredDialogue.map(msg => ({ 
+                                speaker: msg.sender === 'You' ? 'speaker_1' : 'speaker_2', 
+                                turn_text: msg.text 
+                            })),
+                            user: "operatore",
+                            language: "informale"
+                        };
+
+                        // Save the last payload
+                        this.lastPayload = payload;
+
+                        // Send the message to API
+                        const response = await fetch('http://localhost:1234/dynamic_generation/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer w4OqAOToBKiWeHsW3X1zfr0S1rCMY4hA'
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (!response.ok) throw new Error('Network error');
+
+                        const data = await response.json();
+                        const botReply = data.message || 'No reply received';
+
+                        // Save the response
+                        this.lastResponse = botReply;
+
+                        // Update ground keywords and highlight document
+                        this.groundSnippets = data.ground || [];
+
+                        // Map both the user's message and bot's reply to the same grounds
+                        this.messageGroundMap[currentMessage] = this.groundSnippets;
+                        this.messageGroundMap[botReply] = this.groundSnippets;
+
+                        // Replace processing message with actual reply
+                        processingMessage.text = botReply;
+
+                        // Scroll to first highlighted part after bot's response
+                        this.scrollToFirstHighlighted();
+
+                    } catch (error) {
+                        // In case of an error, update the message with error text
+                        processingMessage.text = `Error: ${error.message}`;
+                    }
+
+                    // Reset waiting state (to enable the Send button again)
+                    this.isWaiting = false;
+
+                    // Scroll to bottom after bot reply
+                    this.scrollToBottom();
+                },
+
+                async reloadLastMessage() {
+                    if (!this.lastMessage || !this.lastPayload) return;
+
+                    // Remove the last two messages before resending
+                    this.messages.splice(-2, 2);
+
+                    // Add user's last message again
+                    this.messages.push({ sender: 'You', text: this.lastMessage });
+
+                    // Add processing message
+                    const processingMessage = { sender: 'Bot', text: 'Elaboro la risposta...' };
+                    this.messages.push(processingMessage);
+
+                    // Set waiting state
+                    this.isWaiting = true;
+
+                    // Scroll to bottom after user message and processing message is added
+                    this.scrollToBottom();
+
+                    try {
+                        // Send the last stored payload
+                        const response = await fetch('http://localhost:1234/dynamic_generation/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': 'Bearer w4OqAOToBKiWeHsW3X1zfr0S1rCMY4hA'
+                            },
+                            body: JSON.stringify(this.lastPayload)
+                        });
+
+                        if (!response.ok) throw new Error('Network error');
+
+                        const data = await response.json();
+                        const botReply = data.message || 'No reply received';
+
+                        // Save the response again
+                        this.lastResponse = botReply;
+
+                        // Update ground keywords and highlight document
+                        this.groundSnippets = data.ground || [];
+
+                        // Replace processing message with actual reply
+                        processingMessage.text = botReply;
+
+                        // Scroll to first highlighted part after bot's response
+                        this.scrollToFirstHighlighted();
+
+                    } catch (error) {
+                        // In case of an error, update the message with error text
+                        processingMessage.text = `Error: ${error.message}`;
+                    }
+
+                    // Reset waiting state
+                    this.isWaiting = false;
+
+                    // Scroll to bottom after bot reply
+                    this.scrollToBottom();
+                },
+
+                // Function to handle scroll to bottom of chat
+                scrollToBottom() {
+                    this.$nextTick(() => {
+                        const chatMessages = this.$refs.chatMessages;
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                    });
+                },
+
+                // Function to highlight document text based on ground snippets
+                highlightMessageGrounds(messageText) {
+                    const groundSnippets = this.messageGroundMap[messageText];
+                    if (groundSnippets) {
+                        this.groundSnippets = groundSnippets;  // Update the ground snippets for the document
+                        this.scrollToFirstHighlighted();  // Scroll to first highlighted term
+                    }
+                },
+
+                // Scroll to the first highlighted element
+                scrollToFirstHighlighted() {
+                    this.$nextTick(() => {
+                        const highlighted = document.querySelector('.highlight');
+                        if (highlighted) {
+                            highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    });
+                }
+            }
+        });
+    </script>
+</body>
+</html>
