@@ -339,7 +339,7 @@ def aixpa_chatbot_kubeai (documents_list, dialogue_list, user, language, kubeai_
         api_key='ollama', # required, but unused
     )
     message = client.chat.completions.create(
-        model="amici-famiglia-2",
+        model="famiglia-llama-chat_amici-famiglia-2",
         messages=openailist,
         temperature=0.3,
         # max_completion_tokens=1000
