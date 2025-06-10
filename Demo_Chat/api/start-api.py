@@ -16,9 +16,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--host', default="0.0.0.0")
-parser.add_argument('--port', default=8013)
+parser.add_argument('--port', type=int, default=8013)
 parser.add_argument("--lorax_host", default="0.0.0.0")
-parser.add_argument("--lorax_port", default=1234)
+parser.add_argument("--lorax_port", type=int, default=1234)
 parser.add_argument("--hf_token", required = True)
 args = parser.parse_args()
 
