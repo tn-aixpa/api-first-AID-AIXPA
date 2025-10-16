@@ -1,0 +1,21 @@
+ai: NLP
+domain: PA
+metadata:
+  name: API First Aid 
+  description: Human-in-the-loop (HITL) data collection framework for knowledge-driven generation of synthetic dialogues using LLM prompting.
+  kind: supporting component
+  ai: NLP
+  domain: PA
+  license: Apache License 2.0
+usages: ./docs/usage.md
+howto:
+  - title: Create a Docker container and run the whole application
+    ref: ./docs/howto/container.md
+deployments:
+  - id: serve
+    name: Expose the API First Aid application as a service with Web UI
+    kind: service
+    implementation:
+      framework: aixpa
+      spec:
+        kind: container 
