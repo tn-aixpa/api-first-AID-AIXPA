@@ -18,5 +18,4 @@ This software is released under the Apache 2.0 license.
 
 # Funding Acknowledgement
 
-This work was supported by Provincia Autonoma di Trento under grant agreement No. C49G22001020001 (AIxPA) and by the European Union’s CERV fund under grant agreement No. 101143249 (HATEDEMICS).
-
+This work was supported by Provincia Autonoma di Trento under grant agreement No. C49G22001020001 (AIxPA).
